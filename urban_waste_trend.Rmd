@@ -1,0 +1,167 @@
+---
+title: "Urban Waste Trends in Switzerland (1970–2020)"
+author: "Cécile Racine"
+date: "2026-01-31"
+output: html_document
+---
+
+## Background for this project
+
+This project is a learning exercise in the R programming language, focusing on data cleaning and visualization.
+
+This R Markdown file contains two plots created to explore trends in waste production in Swiss cities between 1970 and 2023. The data come from the Swiss Federal Statistical Office (OFS, 2025) and were retrieved from [opendata.swiss](https://opendata.swiss/fr/dataset/siedlungsabfalle4). The dataset is available for download as an Excel file via the linked source.
+
+## Findings
+
+The visualization helps uncovering interesting trends in the data, namely:
+
+* Global Waste Generation has continuously increased since the 1970s, with the steepest increase in the decade to 1980 and the lowest increase in the decade to 2020
+
+* Per-Capita Waste Generation also increased overtime and equally had its steepest increase in the decade to 1980, but a decrease in the decade to 2020 allowed it to come back to its level of 2000, hinting at a stabilization.
+
+* The potential stabilization in Per-Capita Waste Generation is translated into a signficatively flatter increase of the Global Waste Generation in the decade to 2010. However, Global Waste generation was, in 2020, (6 million tonnes) still substantially above its level of 2000 (5 million tonnes).
+
+## Process
+
+### R setup
+
+For this project, the following packages were used:
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(dplyr)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(here)
+```
+
+### Data import
+
+The data from the Swiss Federal Statistical Office (OFS, 2025) were downloaded from [opendata.swiss](https://opendata.swiss/fr/dataset/siedlungsabfalle4) as an Excel file. The `here()` function was used to ensure the file path is portable and the exercise can be reproduced on other devices.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+# 1. Import data
+urban_waste_raw <- read_excel(here("data", "urban_waste_data.xls"))
+```
+
+### Data cleanup
+
+Since the Excel file contained headers, merged cells, empty cells and footer, the imported data frame had to be cleaned before it could be used for visualization. This process was done in multiple steps, starting with renaming columns:
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+# 2. Rename columns
+urban_waste_clean_columns_names <- urban_waste_raw %>%
+  rename(
+    year = "Siedlungsabfälle 1)",
+    mio_tonnes_all = "...2",
+    kg_inhabitant_all = "...3",
+    mio_tonnes_collected = "...4",
+    kg_inhabitant_collected = "...5",
+    mio_tonnes_other = "...6",
+    kg_inhabitant_other = "T 02.03.02.10"
+  )
+```
+
+In the Excel file, only rows 9:62 contained observations and were relevant to the project. To isolate these in the R data frame, only rows containing numbers were kept.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+# 3. Keep only relevant rows (9:62 in the Excel file)
+urban_waste_clean_rows <- urban_waste_clean_columns_names %>%
+  mutate(year = as.numeric(year)) %>%
+  drop_na(year)
+```
+
+To ensure smooth work when using the data frame, the data type of the observations was unified and the numbers were limited to two decimals after 0.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+# 4. Clean data types and decimals
+urban_waste_clean <- urban_waste_clean_rows %>%
+  mutate(
+    year = as.integer(year),
+    mio_tonnes_all = round(as.numeric(mio_tonnes_all), 2),
+    kg_inhabitant_all = round(as.numeric(kg_inhabitant_all), 2),
+    mio_tonnes_collected = round(as.numeric(mio_tonnes_collected), 2),
+    kg_inhabitant_collected = round(as.numeric(kg_inhabitant_collected), 2),
+    mio_tonnes_other = round(as.numeric(mio_tonnes_other), 2),
+    kg_inhabitant_other = round(as.numeric(kg_inhabitant_other), 2)
+  )
+```
+
+Finally, since the project aimed to uncover trends, observations were summarized by decade.
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+# 5. Summarize total and individual mean waste production by decade
+urban_waste_decade <- urban_waste_clean %>%
+  group_by(decade = (year %/% 10) * 10) %>%
+  summarise(
+    mean_total_waste_mt = mean(mio_tonnes_all),
+    mean_inhabitant_kg = mean(kg_inhabitant_all)
+  )
+```
+
+### Visualization
+
+Once the imported data had been cleaned, a first plot was created to visualize the evolution of the global waste generation in Switzerland since 1970.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+total_waste_trend <- ggplot(
+  data = urban_waste_decade
+) +
+  geom_point(mapping = aes(
+    x = decade,
+    y = mean_total_waste_mt,
+    color = decade,
+    size = factor(decade)
+  )) +
+  geom_line(mapping = aes(
+    x = decade,
+    y = mean_total_waste_mt
+  ), color = "steelblue") +
+  labs(
+    title = "Global Waste Generation in Switzerland", x = "Decade", y = "Mean Total Waste (million tonnes)",
+    subtitle = "Continuous Increase since the 1970s", caption = "Source: Swiss Federal Statistical Office (FSO), Urban Waste Statistics, 2025"
+  ) + theme(plot.caption = element_text(size = 8)) +
+  annotate("text",
+    x = 2015, y = 5.5, label = "Flatter increase",
+    fontface = "bold",
+    color = "steelblue",
+    size = 3
+  )
+
+print(total_waste_trend)
+
+```
+
+Finally, a second plot was created to visualize the evolution of the per-capita waste generation over the same period of time.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+# 7. Plot 2: visualize trend in Swiss individual waste production
+individual_waste_trend <- ggplot(
+  data = urban_waste_decade
+) +
+  geom_point(mapping = aes(
+    x = decade,
+    y = mean_inhabitant_kg,
+    color = decade,
+    size = factor(decade)
+  )) +
+  geom_line(mapping = aes(
+    x = decade,
+    y = mean_inhabitant_kg
+  ), color = "steelblue") +
+  labs(
+    title = "Per-Capita Waste Generation in Switzerland",
+    x = "Decade",
+    y = "Mean Waste per Inhabitant (kg)",
+    subtitle = "Stabilisation After 2000", caption = "Source: Swiss Federal Statistical Office (FSO), Urban Waste Statistics, 2025"
+  ) +
+  annotate("text",
+    x = 2015, y = 660, label = "Decrease",
+    fontface = "bold",
+    color = "steelblue",
+    size = 3
+  )
+
+print(individual_waste_trend)
+
+```
+
